@@ -1,0 +1,53 @@
+---
+- name: Deploy DevOps E2E Application
+  hosts: webservers
+  become: yes
+
+  vars:
+    tomcat_version: "9.0.117"
+    tomcat_dir: "/opt/tomcat"
+
+  tasks:
+
+    - name: Install Java
+      apt:
+        name: openjdk-17-jdk
+        state: present
+        update_cache: yes
+
+
+    - name: Create tomcat directory
+      file:
+        path: "{{ tomcat_dir }}"
+        state: directory
+
+
+    - name: Download Tomcat
+      get_url:
+        url: "https://dlcdn.apache.org/tomcat/tomcat-9/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
+        dest: /tmp/tomcat.tar.gz
+
+
+    - name: Extract Tomcat
+      unarchive:
+        src: /tmp/tomcat.tar.gz
+        dest: "{{ tomcat_dir }}"
+        remote_src: yes
+
+
+    - name: Rename Tomcat folder
+      shell: |
+        mv {{ tomcat_dir }}/apache-tomcat-{{ tomcat_version }} {{ tomcat_dir }}/latest
+      args:
+        creates: "{{ tomcat_dir }}/latest"
+
+
+    - name: Copy WAR file
+      copy:
+        src: ../../target/devops-e2e-app.war
+        dest: "{{ tomcat_dir }}/latest/webapps/devops-e2e-app.war"
+
+
+    - name: Start Tomcat
+      shell: |
+        {{ tomcat_dir }}/latest/bin/startup.sh
