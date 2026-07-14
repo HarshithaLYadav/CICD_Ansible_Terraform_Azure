@@ -3,14 +3,14 @@ pipeline {
     agent any
 
     tools {
-        jdk 'Java8'
+        jdk 'JDK8'
         maven 'Maven3'
     }
 
     environment {
-        TOMCAT_HOME = '/opt/tomcat/latest'
-        APP_NAME = 'devops-e2e-app'
-        WAR_FILE = 'target/devops-e2e-app.war'
+        APP_NAME = "devops-e2e-app"
+        TOMCAT_HOME = "/opt/tomcat/latest"
+        TOMCAT_SERVICE = "tomcat"
     }
 
     stages {
@@ -18,10 +18,10 @@ pipeline {
         stage('Verify Tools') {
             steps {
                 sh '''
-                echo "Checking Java version..."
+                echo "Checking Java version"
                 java -version
 
-                echo "Checking Maven version..."
+                echo "Checking Maven version"
                 mvn -version
                 '''
             }
@@ -30,28 +30,19 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                echo "Checking out source code"
                 checkout scm
             }
         }
 
 
-        stage('Run Tests') {
+        stage('Build Application') {
             steps {
-                echo "Running Unit Tests"
                 sh '''
-                mvn clean test
-                '''
-            }
-        }
+                echo "Cleaning previous build"
+                mvn clean
 
-
-        stage('Build WAR') {
-            steps {
-                echo "Building Application WAR"
-                sh '''
-                mvn clean package -DskipTests
-                ls -lh target/*.war
+                echo "Running tests and creating WAR"
+                mvn test package
                 '''
             }
         }
@@ -59,19 +50,36 @@ pipeline {
 
         stage('Deploy to Tomcat') {
             steps {
-                echo "Deploying WAR to Tomcat"
-
                 sh '''
-                echo "Copying WAR file..."
-                sudo cp ${WAR_FILE} ${TOMCAT_HOME}/webapps/
+                echo "Stopping Tomcat"
 
-                echo "Restarting Tomcat..."
-                sudo systemctl restart tomcat
+                sudo systemctl stop ${TOMCAT_SERVICE} || true
 
-                echo "Waiting for Tomcat startup..."
-                sleep 10
 
-                sudo systemctl status tomcat --no-pager
+                echo "Removing old deployment"
+
+                sudo rm -rf ${TOMCAT_HOME}/webapps/${APP_NAME}
+                sudo rm -f ${TOMCAT_HOME}/webapps/${APP_NAME}.war
+
+
+                echo "Copying new WAR"
+
+                sudo cp target/${APP_NAME}.war ${TOMCAT_HOME}/webapps/
+
+
+                echo "Changing ownership"
+
+                sudo chown tomcat:tomcat ${TOMCAT_HOME}/webapps/${APP_NAME}.war
+
+
+                echo "Starting Tomcat"
+
+                sudo systemctl start ${TOMCAT_SERVICE}
+
+
+                echo "Waiting for Tomcat startup"
+
+                sleep 15
                 '''
             }
         }
@@ -79,25 +87,14 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-                echo "Checking application health"
-
                 sh '''
-                for i in {1..12}
-                do
-                    echo "Attempt $i: Checking application..."
+                echo "Checking application"
 
-                    if curl -f http://localhost:8080/${APP_NAME}/hello
-                    then
-                        echo "Application deployed successfully"
-                        exit 0
-                    fi
+                curl -f http://localhost:8080/${APP_NAME}/hello
 
-                    echo "Application not ready. Waiting 5 seconds..."
-                    sleep 5
-                done
 
-                echo "Application deployment verification failed"
-                exit 1
+                echo ""
+                echo "Deployment Successful"
                 '''
             }
         }
@@ -108,16 +105,14 @@ pipeline {
     post {
 
         success {
-            echo "Deployment completed successfully!"
+            echo "CI/CD Pipeline completed successfully"
         }
+
 
         failure {
-            echo "Deployment failed."
-        }
-
-        always {
-            cleanWs()
+            echo "Deployment failed"
         }
 
     }
+
 }
