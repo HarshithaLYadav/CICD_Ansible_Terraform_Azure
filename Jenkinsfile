@@ -27,11 +27,18 @@ pipeline {
             }
         }
 
-        stage('Verify Deployment') {
-            steps {
-                sh 'curl http://localhost:8080/devops-e2e-app/hello'
-            }
-        }
+stage('Verify Deployment') {
+    steps {
+        sh '''
+        for i in {1..10}; do
+            curl -f http://localhost:8081/devops-e2e-app/hello && exit 0
+            echo "Waiting for Tomcat to start..."
+            sleep 5
+        done
+        exit 1
+        '''
+    }
+}
     }
 
     post {
