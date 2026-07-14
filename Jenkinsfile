@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'JDK8'
+        maven 'Maven3'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -11,39 +16,35 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'mvn clean compile'
+                sh 'mvn clean package'
             }
         }
 
-        stage('Test') {
+        stage('Deploy to Tomcat') {
             steps {
-                sh 'mvn test'
+                sh 'sudo cp target/devops-e2e-app.war /opt/tomcat/latest/webapps/'
+                sh 'sudo systemctl restart tomcat'
             }
         }
 
-        stage('Archive') {
+        stage('Verify Deployment') {
             steps {
-                sh 'mvn package'
-                archiveArtifacts artifacts: 'target/*.war', fingerprint: true
+                sh 'curl http://localhost:8080/devops-e2e-app/hello'
             }
         }
+    }
 
-        stage('Deploy') {
-            steps {
-                sh '''
-                sudo cp target/devops-e2e-app.war /opt/tomcat/latest/webapps/
-                sudo systemctl restart tomcat
-                sleep 20
-                '''
-            }
+    post {
+        success {
+            echo 'Application deployed successfully.'
         }
 
-        stage('Health Check') {
-            steps {
-                sh '''
-                curl -I http://localhost:8081/devops-e2e-app/
-                '''
-            }
+        failure {
+            echo 'Deployment failed.'
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
